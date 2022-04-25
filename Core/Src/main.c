@@ -65,7 +65,12 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+uint32_t adc[1];
+
 int cuento_20ms=0;
+
+
+
 Entrada_t  ON_OFF=
 {
 	.PIN = GPIO_PIN_13,
@@ -88,12 +93,13 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+//Lee en forma generica la entrada del micro tomando la info del Puerto y del Pin, Devuelve si esta pulsado o no
 int readPin (Entrada_t *Entrada)
 {
 	return HAL_GPIO_ReadPin(Entrada->Port, Entrada->PIN);
 }
 
-void updateButton(Entrada_t* Entrada)
+void updateButton(Entrada_t* Entrada) //Actualiza el estado de la entrada chequeando los 20 ms
 {
 	switch (Entrada->State)
 		{
@@ -179,7 +185,10 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_ADC_Start_DMA(&hadc1,adc,1);
+  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);//PWM Direccion
+  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);//PWM Velocidad
+  HAL_TIM_Base_Start_IT(&htim2); //Interrupcion maquina estado
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -187,10 +196,15 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  updateButton(&ON_OFF);
 
     /* USER CODE BEGIN 3 */
+
+	 updateButton(&ON_OFF);
+
+
   }
+
+
   /* USER CODE END 3 */
 }
 
@@ -476,7 +490,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = AV2_Pin|AV1_Pin|VEL_Pin|ON_OFF_Pin
                           |IN_2_Pin|IN_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
