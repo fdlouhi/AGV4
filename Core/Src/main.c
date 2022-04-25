@@ -22,11 +22,27 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "Funciones.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef enum
+{
+	BottonUp,
+	BottonFalling,
+	BottonDown,
+	BottonRising
+} BottonState_t;
+
+typedef struct
+{
+	uint16_t PIN;
+	GPIO_TypeDef * Port;
+	BottonState_t State;
+
+}Entrada_t;
 
 /* USER CODE END PTD */
 
@@ -49,7 +65,13 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-
+int cuento_20ms=0;
+Entrada_t  ON_OFF=
+{
+	.PIN = GPIO_PIN_13,
+	.Port = GPIOB,
+	.State = BottonUp,
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -66,7 +88,61 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int readPin (Entrada_t *Entrada)
+{
+	return HAL_GPIO_ReadPin(Entrada->Port, Entrada->PIN);
+}
 
+void updateButton(Entrada_t* Entrada)
+{
+	switch (Entrada->State)
+		{
+		case BottonUp:
+			  		  if(readPin(Entrada) ==0)
+			  		  {
+			  			Entrada->State= BottonFalling;
+			  			cuento_20ms=0;
+			  		  }
+		break;
+
+		case BottonFalling:
+			  		  if (cuento_20ms==20)
+			  		  {
+				  			if(readPin(Entrada) == 0)
+				  				{
+				  				Entrada->State= BottonDown;
+				  				}
+			  				else
+			  				 	 {
+			  					 Entrada->State= BottonUp;
+			  				 	 }
+			  		  }
+		break;
+
+		case BottonDown:
+			  		 if (readPin(Entrada) == 1)
+			  		 {
+			  			 	 Entrada->State= BottonRising;
+			  			  	 cuento_20ms=0;
+			  		 }
+		break;
+
+		case BottonRising:
+					if (cuento_20ms==20)
+			  		{
+			  			  		if(readPin(Entrada)==1)
+			  			  		{
+			  			  			Entrada->State= BottonUp;
+
+			  			  		}
+			  			  		else
+			  			  		{
+			  			  			Entrada->State= BottonDown;
+			  			  		}
+			  		}
+		break;
+		}
+}
 /* USER CODE END 0 */
 
 /**
@@ -111,6 +187,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+	  updateButton(&ON_OFF);
 
     /* USER CODE BEGIN 3 */
   }
@@ -405,7 +482,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+cuento_20ms++;
 
+}
 /* USER CODE END 4 */
 
 /**
