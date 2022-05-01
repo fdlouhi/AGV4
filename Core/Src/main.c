@@ -28,6 +28,15 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+typedef enum
+{
+	PulsoON,
+	PulsoFalling
+} Tacometro_t;
+
+
+
 typedef enum
 {
 	BottonUp,
@@ -41,8 +50,10 @@ typedef struct
 	uint16_t PIN;
 	GPIO_TypeDef * Port;
 	BottonState_t State;
-
+	Tacometro_t State1;
 }Entrada_t;
+
+
 
 /* USER CODE END PTD */
 
@@ -68,14 +79,26 @@ UART_HandleTypeDef huart1;
 uint32_t adc[1];
 
 int cuento_20ms=0;
+int cuento_1s=0;
+int cuento_5ms=0;
+int Pulsos=0; /*cuenta la cantidad de pulsos cada 1 seg*/
+int Pulso_ant=0; /*estado del pulso anterior para detectar el flanco ascendente*/
+int velocidad=0;
 
-
+Entrada_t  Velocimetro=
+{
+	.PIN = GPIO_PIN_12,
+	.Port = GPIOB,
+	.State = BottonUp,
+	.State1 = PulsoON,
+};
 
 Entrada_t  ON_OFF=
 {
 	.PIN = GPIO_PIN_13,
 	.Port = GPIOB,
 	.State = BottonUp,
+	.State1 = PulsoON,
 };
 /* USER CODE END PV */
 
@@ -98,8 +121,8 @@ int readPin (Entrada_t *Entrada)
 {
 	return HAL_GPIO_ReadPin(Entrada->Port, Entrada->PIN);
 }
-
-void updateButton(Entrada_t* Entrada) //Actualiza el estado de la entrada chequeando los 20 ms
+/*Funcion que actualiza el estado State de los botones confirmando el estado despues de 20 ms*/
+void updateButton(Entrada_t* Entrada)
 {
 	switch (Entrada->State)
 		{
@@ -112,7 +135,7 @@ void updateButton(Entrada_t* Entrada) //Actualiza el estado de la entrada cheque
 		break;
 
 		case BottonFalling:
-			  		  if (cuento_20ms==20)
+			  		  if (cuento_20ms==4)
 			  		  {
 				  			if(readPin(Entrada) == 0)
 				  				{
@@ -134,7 +157,7 @@ void updateButton(Entrada_t* Entrada) //Actualiza el estado de la entrada cheque
 		break;
 
 		case BottonRising:
-					if (cuento_20ms==20)
+					if (cuento_20ms==4)
 			  		{
 			  			  		if(readPin(Entrada)==1)
 			  			  		{
@@ -188,7 +211,7 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1,adc,1);
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);//PWM Direccion
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);//PWM Velocidad
-  HAL_TIM_Base_Start_IT(&htim2); //Interrupcion maquina estado
+  HAL_TIM_Base_Start_IT(&htim2); //Interrupcion Timer cada 5 ms
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -198,9 +221,52 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	/* Actualizo el estado de los botones con la funcion updateButton */
+	 updateButton(&ON_OFF) ;
 
-	 updateButton(&ON_OFF);
+	 /*Calculo de Velocidad*/
+	 /*Cada 1 seg calcula cantidad de pulsos y realiza la converción a la valriable velocidad
+	 *El tacometro funciona tomando muestras y cada vez que detecta un flanco ascendente incrementa
+	 *la cantidad de pulsos, al transcurrir 1 seg realizar el calculo de velocidad y resetea las variables.
+	 *El periodo máxima del tacómetro es de 20ms y se decide tomar una muestra de 5 ms porque el Duty Cicle
+	 *no es 50%, el tiempo en off es la mitad del tiempo en ON
+	 *las entradas estan en resistencia pull up, 0 es activado y 1 desactivado*/
 
+	 if (cuento_1s==200)/*Espera que transcurra un 1 seg y resetea variables*/
+	 {
+		 cuento_1s=0;
+		 velocidad=Pulsos*0.212*60/20;	//calcula velocidad en metros/minutos
+		 Pulsos=0;
+	 }
+	 else
+	 {
+		 if (cuento_5ms==1) /*cada 5 ms tomo una muestra y actualizo el estado State1*/
+		 {
+			cuento_5ms=0;
+			switch (Velocimetro.State1)
+			{
+				case PulsoON:
+				Pulso_ant=1;
+				if (readPin(&Velocimetro)==1)
+						{
+						Velocimetro.State1= PulsoFalling;
+						}
+				break;
+
+				case PulsoFalling:
+				if (Pulso_ant==1)
+					{
+					Pulsos++;
+					Pulso_ant=0;
+					}
+				if (readPin(&Velocimetro)==0)
+					{
+					Velocimetro.State1= PulsoON;
+					}
+				break;
+			}
+		 }
+	 }
 
   }
 
@@ -499,6 +565,8 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 cuento_20ms++;
+cuento_1s++;
+cuento_5ms++;
 
 }
 /* USER CODE END 4 */
