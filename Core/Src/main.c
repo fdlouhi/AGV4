@@ -102,7 +102,6 @@ float Tension=0;
 float Tension_muestras =0;
 float TensionAve =6;
 int i=0;
-float Tension_Average;
 int cuento_20ms=0;
 int cuento_1s=0;
 int cuento_5ms=0;
@@ -113,7 +112,7 @@ int VEL=0;	/*variable para el PWM del motor, actualiza la velocidad del AGV*/
 int DIR=67; /*variable para el PWM del servomotor, indica cuanto debe doblar tiene que estar en (67) +- 15 */
 int cuento_10s=0;
 int cuento_20ms2=0;
-
+int blinkingfalla=0;
 LecBateria_t LecBateria=Lectura;
 
 Estado_t Estado=Apagado;
@@ -347,12 +346,17 @@ int main(void)
 		 }
 	 }
 
-  }
+
   /*Indica el estado del AGV*/
 
   switch (Estado)
   	  {
   	  case Apagado:
+  		if (TensionAve <= 3)
+  		  		{
+  		  		Estado=Falla;
+  		  		}
+
   		  VEL=0;
   		  DIR=PWM_CENTRO;
   		  if (ON_OFF.State2 == ON)
@@ -361,6 +365,10 @@ int main(void)
   			  }
   		  break;
   	  case Avanzando:
+  		if (TensionAve <= 3)
+  		  		  		{
+  		  		  		Estado=Falla;
+  		  		  		}
   		if(DIR>=70 || DIR<=64)
   			{
   			 VEL=300;
@@ -387,6 +395,10 @@ int main(void)
 
   		  break;
   	  case Dobla_Derecha:
+  		if (TensionAve <= 3)
+  		  	{
+  		  	Estado=Falla;
+  		  	}
   		  if (ON_OFF.State2 == OFF)
   		  	  {
   			  Estado=Apagado;
@@ -401,6 +413,10 @@ int main(void)
   			  }
 	  	  break;
   	  case Dobla_Izquierda:
+  		if (TensionAve <= 3)
+  		  	{
+  		  	Estado=Falla;
+  		  	}
   		  if (ON_OFF.State2 == OFF)
   		  	  {
   			  Estado=Apagado;
@@ -416,14 +432,26 @@ int main(void)
   		  break;
   	  case Falla:
 
+  		  if (blinkingfalla==100)
+  		  {
+  			VEL=0;
+  			HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
+  			blinkingfalla=0;
+  		  }
   		  break;
   	 }
 
   /*Lectura cada 10 seg de la tension de bateria, toma 10 muetras cada 20 ms y realiza un promedio*/
 
-  if (cuento_10s >=2000)
-  {
-  	  switch (LecBateria)
+  	  if (cuento_10s ==2000)
+      {
+	  LecBateria=Lectura;
+	  cuento_20ms2=0;
+	  i=0;
+	  Tension_muestras=0;
+	  cuento_10s=0;
+      }
+	  switch (LecBateria)
   	  {
   	  case  Lectura:
 
@@ -440,16 +468,14 @@ int main(void)
   		  break;
   	  case 	calculo:
   		 TensionAve = Tension_muestras/(i+1);
-  		 i=0;
-  		 LecBateria =Lectura;
-  		 Tension_muestras=0;
+
   		 break;
   	  }
-  }
+
 
   htim1.Instance->CCR1=DIR; /*Inicializo la direccion derecho (67) +- 15*/
   htim1.Instance->CCR2=VEL; /*Inicializo Velocidad 0*/
-
+  }
 
   /* USER CODE END 3 */
 }
@@ -727,9 +753,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : AV2_Pin AV1_Pin VEL_Pin ON_OFF_Pin
                            IN_2_Pin IN_1_Pin */
@@ -749,6 +786,7 @@ cuento_1s++;
 cuento_5ms++;
 cuento_10s++;
 cuento_20ms2++;
+blinkingfalla++;
 }
 /* USER CODE END 4 */
 
