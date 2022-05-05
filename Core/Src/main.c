@@ -164,7 +164,8 @@ int readPin (Entrada_t *Entrada)
 {
 	return HAL_GPIO_ReadPin(Entrada->Port, Entrada->PIN);
 }
-/*Funcion que actualiza el estado State de los botones confirmando el estado despues de 20 ms*/
+/*Funcion que actualiza el estado State de los botones confirmando el estado despues de 20 ms y actualiza el estado 2
+ para formar un swich ON OFF*/
 void updateButton(Entrada_t* Entrada)
 {
 	switch (Entrada->State)
