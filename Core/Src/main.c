@@ -32,18 +32,30 @@
 typedef enum
 {
 	PulsoON,
-	PulsoFalling
+	PulsoFalling,
 } Tacometro_t;
 
-
+typedef enum
+{
+	Apagado,
+	Avanzando,
+	Dobla_Derecha,
+	Dobla_Izquierda,
+} Estado_t;
 
 typedef enum
 {
 	BottonUp,
 	BottonFalling,
 	BottonDown,
-	BottonRising
+	BottonRising,
 } BottonState_t;
+
+typedef enum
+{
+	ON,
+	OFF,
+} Encendido_t;
 
 typedef struct
 {
@@ -51,8 +63,9 @@ typedef struct
 	GPIO_TypeDef * Port;
 	BottonState_t State;
 	Tacometro_t State1;
+	Encendido_t State2;
+	BottonState_t State_ant;
 }Entrada_t;
-
 
 
 /* USER CODE END PTD */
@@ -84,6 +97,11 @@ int cuento_5ms=0;
 int Pulsos=0; /*cuenta la cantidad de pulsos cada 1 seg*/
 int Pulso_ant=0; /*estado del pulso anterior para detectar el flanco ascendente*/
 int velocidad=0;
+int VEL=0;	/*variable para el PWM del motor, actualiza la velocidad del AGV*/
+int DIR=67; /*variable para el PWM del servomotor, indica cuanto debe doblar tiene que estar en (67) +- 15 */
+
+
+Estado_t Estado=Apagado;
 
 Entrada_t  Velocimetro=
 {
@@ -91,6 +109,8 @@ Entrada_t  Velocimetro=
 	.Port = GPIOB,
 	.State = BottonUp,
 	.State1 = PulsoON,
+	.State2 = OFF,
+	.State_ant = BottonUp,
 };
 
 Entrada_t  ON_OFF=
@@ -99,7 +119,30 @@ Entrada_t  ON_OFF=
 	.Port = GPIOB,
 	.State = BottonUp,
 	.State1 = PulsoON,
+	.State2 = OFF,
+	.State_ant = BottonUp,
 };
+
+Entrada_t  Sensor_derecha=
+{
+	.PIN = GPIO_PIN_14,
+	.Port = GPIOB,
+	.State = BottonUp,
+	.State1 = PulsoON,
+	.State2 = OFF,
+	.State_ant = BottonUp,
+};
+
+Entrada_t  Sensor_izquierda=
+{
+	.PIN = GPIO_PIN_15,
+	.Port = GPIOB,
+	.State = BottonUp,
+	.State1 = PulsoON,
+	.State2 = OFF,
+	.State_ant = BottonUp,
+};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -132,6 +175,18 @@ void updateButton(Entrada_t* Entrada)
 			  			Entrada->State= BottonFalling;
 			  			cuento_20ms=0;
 			  		  }
+			  		  if(Entrada->State_ant==BottonDown)
+			  		  {
+			  			Entrada->State_ant= BottonUp;
+			  			if (Entrada->State2==OFF)
+			  				{
+			  				Entrada->State2= ON;
+			  				}
+			  			else
+			  				{
+			  				Entrada->State2= OFF;
+			  				}
+			  		  }
 		break;
 
 		case BottonFalling:
@@ -154,6 +209,7 @@ void updateButton(Entrada_t* Entrada)
 			  			 	 Entrada->State= BottonRising;
 			  			  	 cuento_20ms=0;
 			  		 }
+			  		 Entrada->State_ant= BottonDown;
 		break;
 
 		case BottonRising:
@@ -223,6 +279,8 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	/* Actualizo el estado de los botones con la funcion updateButton */
 	 updateButton(&ON_OFF) ;
+	 updateButton(&Sensor_derecha) ;
+	 updateButton(&Sensor_izquierda) ;
 
 	 /*Calculo de Velocidad*/
 	 /*Cada 1 seg calcula cantidad de pulsos y realiza la converción a la valriable velocidad
@@ -269,6 +327,77 @@ int main(void)
 	 }
 
   }
+  /*Indica el estado del AGV*/
+
+  switch (Estado)
+  	  {
+  	  case Apagado:
+  		  VEL=0;
+  		  DIR=67;
+  		  if (ON_OFF.State2 == ON)
+  		  	  {
+  			   Estado=Avanzando;
+  			  }
+  		  break;
+  	  case Avanzando:
+  		if(DIR>=70 || DIR<=64)
+  			{
+  			 VEL=300;
+  			}
+  		else
+  			{
+  			 VEL=1000;
+  			}
+  		  if (ON_OFF.State2 == OFF)
+  		  	  {
+  			  Estado=Apagado;
+  			  }
+  		 else
+  		 	 {
+  			if (Sensor_izquierda.State == BottonDown)
+  			  		  	  {
+  			  		  	  Estado=Dobla_Izquierda;
+  			  		  	  }
+  			if (Sensor_derecha.State == BottonDown)
+  			  			  {
+  			  			  Estado=Dobla_Derecha;
+  			  			  }
+  		 	 }
+
+  		  break;
+  	  case Dobla_Derecha:
+  		  if (ON_OFF.State2 == OFF)
+  		  	  {
+  			  Estado=Apagado;
+  			  }
+  		else
+  			  {
+  				if(DIR<82)
+  					{
+  					DIR=DIR+5;
+  					}
+  			  Estado=Avanzando;
+  			  }
+	  	  break;
+  	  case Dobla_Izquierda:
+  		  if (ON_OFF.State2 == OFF)
+  		  	  {
+  			  Estado=Apagado;
+  			  }
+  		else
+  			{
+  			if(DIR>52)
+  				{
+  				 DIR=DIR-5;
+  				}
+  			Estado=Avanzando;
+  			}
+  		  break;
+
+  	  }
+
+  htim1.Instance->CCR1=DIR; /*Inicializo la direccion derecho (67) +- 15*/
+  htim1.Instance->CCR2=VEL; /*Inicializo Velocidad 0*/
 
 
   /* USER CODE END 3 */
