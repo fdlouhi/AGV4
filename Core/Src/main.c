@@ -28,6 +28,13 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+#define PWM_CENTRO 67
+
+typedef enum
+{
+	Lectura,
+	calculo,
+} LecBateria_t;
 
 typedef enum
 {
@@ -41,6 +48,7 @@ typedef enum
 	Avanzando,
 	Dobla_Derecha,
 	Dobla_Izquierda,
+	Falla,
 } Estado_t;
 
 typedef enum
@@ -90,7 +98,11 @@ UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 uint32_t adc[1];
-
+float Tension=0;
+float Tension_muestras =0;
+float TensionAve =6;
+int i=0;
+float Tension_Average;
 int cuento_20ms=0;
 int cuento_1s=0;
 int cuento_5ms=0;
@@ -99,7 +111,10 @@ int Pulso_ant=0; /*estado del pulso anterior para detectar el flanco ascendente*
 int velocidad=0;
 int VEL=0;	/*variable para el PWM del motor, actualiza la velocidad del AGV*/
 int DIR=67; /*variable para el PWM del servomotor, indica cuanto debe doblar tiene que estar en (67) +- 15 */
+int cuento_10s=0;
+int cuento_20ms2=0;
 
+LecBateria_t LecBateria=Lectura;
 
 Estado_t Estado=Apagado;
 
@@ -142,6 +157,11 @@ Entrada_t  Sensor_izquierda=
 	.State2 = OFF,
 	.State_ant = BottonUp,
 };
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef*hadc)
+{
+Tension=adc[0]*0.0014;
+}
 
 /* USER CODE END PV */
 
@@ -334,7 +354,7 @@ int main(void)
   	  {
   	  case Apagado:
   		  VEL=0;
-  		  DIR=67;
+  		  DIR=PWM_CENTRO;
   		  if (ON_OFF.State2 == ON)
   		  	  {
   			   Estado=Avanzando;
@@ -394,8 +414,38 @@ int main(void)
   			Estado=Avanzando;
   			}
   		  break;
+  	  case Falla:
 
+  		  break;
+  	 }
+
+  /*Lectura cada 10 seg de la tension de bateria, toma 10 muetras cada 20 ms y realiza un promedio*/
+
+  if (cuento_10s >=2000)
+  {
+  	  switch (LecBateria)
+  	  {
+  	  case  Lectura:
+
+  		  if (cuento_20ms2==4)
+  		  {
+  		  Tension_muestras += Tension;
+  		  i++;
+  		  cuento_20ms2=0;
+  		  }
+  		  if (i==9)
+  		  {
+  		  LecBateria=calculo;
+  		  }
+  		  break;
+  	  case 	calculo:
+  		 TensionAve = Tension_muestras/(i+1);
+  		 i=0;
+  		 LecBateria =Lectura;
+  		 Tension_muestras=0;
+  		 break;
   	  }
+  }
 
   htim1.Instance->CCR1=DIR; /*Inicializo la direccion derecho (67) +- 15*/
   htim1.Instance->CCR2=VEL; /*Inicializo Velocidad 0*/
@@ -697,7 +747,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 cuento_20ms++;
 cuento_1s++;
 cuento_5ms++;
-
+cuento_10s++;
+cuento_20ms2++;
 }
 /* USER CODE END 4 */
 
