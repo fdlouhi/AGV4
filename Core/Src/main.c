@@ -89,7 +89,6 @@ typedef struct
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -97,12 +96,12 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-uint32_t adc[1];
-float Tension=0;
-float Tension_muestras =0;
-float TensionAve =6;
-int i=0;
-int cuento_20ms=0;
+uint32_t adc[1]; /*Utilizado por el ADC*/
+float Tension=0; /*Valores de tension instantaneos*/
+float Tension_muestras =0; /*Suma las muestras de tension*/
+float TensionAve =6; /*Tension promedio*/
+int i=0; /*cuenta la cantidad de muestras a tomar del ADC para la tension de bateria*/
+int cuento_20ms=0; /*para esperar los 20 ms de los botones*/
 int cuento_1s=0;
 int cuento_5ms=0;
 int Pulsos=0; /*cuenta la cantidad de pulsos cada 1 seg*/
@@ -110,9 +109,10 @@ int Pulso_ant=0; /*estado del pulso anterior para detectar el flanco ascendente*
 int velocidad=0;
 int VEL=0;	/*variable para el PWM del motor, actualiza la velocidad del AGV*/
 int DIR=67; /*variable para el PWM del servomotor, indica cuanto debe doblar tiene que estar en (67) +- 15 */
-int cuento_10s=0;
-int cuento_20ms2=0;
-int blinkingfalla=0;
+int cuento_10s=0; /*para realizar la medición de la bateria cada 10 seg*/
+int cuento_20ms2=0; /*para tomar muestras de tension de bateria cada 20 ms*/
+int blinkingfalla=0; /*Variable para realizar el destello del led de falla*/
+
 LecBateria_t LecBateria=Lectura;
 
 Estado_t Estado=Apagado;
@@ -157,17 +157,12 @@ Entrada_t  Sensor_izquierda=
 	.State_ant = BottonUp,
 };
 
-void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef*hadc)
-{
-Tension=adc[0]*0.0014;
-}
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
@@ -278,13 +273,12 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  HAL_ADC_Start_DMA(&hadc1,adc,1);
+
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);//PWM Direccion
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);//PWM Velocidad
   HAL_TIM_Base_Start_IT(&htim2); //Interrupcion Timer cada 5 ms
@@ -347,16 +341,19 @@ int main(void)
 	 }
 
 
-  /*Indica el estado del AGV*/
+  /*Indica el estado del AGV, En el caso de  que el promedio de tension baje de 3.5 entra en falla y no sale de ahi
+   Cuando se encuentra en apagado centra las ruedas y apaga baja la velocidad a 0, en encendido dependiendo de la
+   posición de las ruedas aumenta o baja la velocidad, en los estado de doblar solamente ajusta la direccion
+   y vuelve al estado avanzar.*/
 
   switch (Estado)
   	  {
   	  case Apagado:
-  		if (TensionAve <= 3)
+  		if (TensionAve <= 3.5)
   		  		{
   		  		Estado=Falla;
+  		  	    blinkingfalla=0;
   		  		}
-
   		  VEL=0;
   		  DIR=PWM_CENTRO;
   		  if (ON_OFF.State2 == ON)
@@ -365,9 +362,11 @@ int main(void)
   			  }
   		  break;
   	  case Avanzando:
-  		if (TensionAve <= 3)
+
+  		  if (TensionAve <= 3.5)
   		  		  		{
   		  		  		Estado=Falla;
+  		  		  	    blinkingfalla=0;
   		  		  		}
   		if(DIR>=70 || DIR<=64)
   			{
@@ -395,9 +394,10 @@ int main(void)
 
   		  break;
   	  case Dobla_Derecha:
-  		if (TensionAve <= 3)
+  		if (TensionAve <= 3.5)
   		  	{
   		  	Estado=Falla;
+  		    blinkingfalla=0;
   		  	}
   		  if (ON_OFF.State2 == OFF)
   		  	  {
@@ -413,9 +413,10 @@ int main(void)
   			  }
 	  	  break;
   	  case Dobla_Izquierda:
-  		if (TensionAve <= 3)
+  		if (TensionAve <= 3.5)
   		  	{
   		  	Estado=Falla;
+  		    blinkingfalla=0;
   		  	}
   		  if (ON_OFF.State2 == OFF)
   		  	  {
@@ -437,6 +438,7 @@ int main(void)
   			VEL=0;
   			HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
   			blinkingfalla=0;
+
   		  }
   		  break;
   	 }
@@ -445,11 +447,13 @@ int main(void)
 
   	  if (cuento_10s ==2000)
       {
+
 	  LecBateria=Lectura;
 	  cuento_20ms2=0;
 	  i=0;
 	  Tension_muestras=0;
 	  cuento_10s=0;
+
       }
 	  switch (LecBateria)
   	  {
@@ -457,7 +461,12 @@ int main(void)
 
   		  if (cuento_20ms2==4)
   		  {
-  		  Tension_muestras += Tension;
+  		  HAL_ADC_Start(&hadc1); /*Enciendo el ADC tomo la muestra y lo apago*/
+  		  HAL_ADC_PollForConversion(&hadc1, 10);
+  		  adc[0]=HAL_ADC_GetValue(&hadc1);
+  		  HAL_ADC_Stop(&hadc1);
+  	      Tension=adc[0]*0.0014;
+  	      Tension_muestras += Tension;
   		  i++;
   		  cuento_20ms2=0;
   		  }
@@ -467,7 +476,8 @@ int main(void)
   		  }
   		  break;
   	  case 	calculo:
-  		 TensionAve = Tension_muestras/(i+1);
+
+  		 TensionAve = Tension_muestras/(i);
 
   		 break;
   	  }
@@ -724,22 +734,6 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
