@@ -49,6 +49,7 @@ typedef enum
 	Dobla_Derecha,
 	Dobla_Izquierda,
 	Falla,
+	Standby,
 } Estado_t;
 
 typedef enum
@@ -113,6 +114,8 @@ int cuento_10s=0; /*para realizar la medición de la bateria cada 10 seg*/
 int cuento_20ms2=0; /*para tomar muestras de tension de bateria cada 20 ms*/
 int blinkingfalla=0; /*Variable para realizar el destello del led de falla*/
 int delay_dobla=0; /*Variable utilizada para que doble de a poco el servomotor*/
+int esperaStandby=0;/*Variable para esperar los 5 seg para cargar los materiales a transportar*/
+
 LecBateria_t LecBateria=Lectura;
 
 Estado_t Estado=Apagado;
@@ -416,8 +419,16 @@ int main(void)
   					}
   				Estado=Avanzando;
   				}
+  				else
+  				{
+  				if (Sensor_izquierda.State == BottonDown)
+  				  			  		  	  {
+  				  			  		  	  Estado=Standby;
+  				  			  		esperaStandby=0;
+  				  			  		      }
+  				}
+  				}
 
-  			  }
 	  	  break;
   	  case Dobla_Izquierda:
   		if (TensionAve <= 1.0)
@@ -440,6 +451,15 @@ int main(void)
   				}
   			Estado=Avanzando;
   			}
+  			else
+  			  	{
+  			  	if (Sensor_derecha.State == BottonDown)
+  			  				  		  	  {
+  			  	  			  		  	  Estado=Standby;
+  			  	  			  		  	  esperaStandby=0;
+  			  	  			  		      }
+  			  	}
+
   			}
   		  break;
   	  case Falla:
@@ -450,6 +470,13 @@ int main(void)
   			HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
   			blinkingfalla=0;
 
+  		  }
+  		  break;
+  	  case Standby:
+  		  VEL=0;
+  		  if(esperaStandby>=1000)
+  		  {
+  			Estado=Avanzando;
   		  }
   		  break;
   	 }
@@ -793,6 +820,7 @@ cuento_10s++;
 cuento_20ms2++;
 blinkingfalla++;
 delay_dobla++;
+esperaStandby++;
 }
 /* USER CODE END 4 */
 
