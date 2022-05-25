@@ -112,7 +112,7 @@ int DIR=67; /*variable para el PWM del servomotor, indica cuanto debe doblar tie
 int cuento_10s=0; /*para realizar la medición de la bateria cada 10 seg*/
 int cuento_20ms2=0; /*para tomar muestras de tension de bateria cada 20 ms*/
 int blinkingfalla=0; /*Variable para realizar el destello del led de falla*/
-
+int delay_dobla=0; /*Variable utilizada para que doble de a poco el servomotor*/
 LecBateria_t LecBateria=Lectura;
 
 Estado_t Estado=Apagado;
@@ -349,7 +349,7 @@ int main(void)
   switch (Estado)
   	  {
   	  case Apagado:
-  		if (TensionAve <= 3.5)
+  		if (TensionAve <= 1.0)
   		  		{
   		  		Estado=Falla;
   		  	    blinkingfalla=0;
@@ -363,7 +363,7 @@ int main(void)
   		  break;
   	  case Avanzando:
 
-  		  if (TensionAve <= 3.5)
+  		  if (TensionAve <= 1.0)
   		  		  		{
   		  		  		Estado=Falla;
   		  		  	    blinkingfalla=0;
@@ -385,16 +385,18 @@ int main(void)
   			if (Sensor_izquierda.State == BottonDown)
   			  		  	  {
   			  		  	  Estado=Dobla_Izquierda;
+  			  		      delay_dobla=0;
   			  		  	  }
   			if (Sensor_derecha.State == BottonDown)
   			  			  {
   			  			  Estado=Dobla_Derecha;
+  			  			  delay_dobla=0;
   			  			  }
   		 	 }
 
   		  break;
   	  case Dobla_Derecha:
-  		if (TensionAve <= 3.5)
+  		if (TensionAve <= 1.0)
   		  	{
   		  	Estado=Falla;
   		    blinkingfalla=0;
@@ -405,15 +407,20 @@ int main(void)
   			  }
   		else
   			  {
+  				if(delay_dobla>=50)
+  				{
+  					delay_dobla=0;
   				if(DIR<82)
   					{
   					DIR=DIR+5;
   					}
-  			  Estado=Avanzando;
+  				Estado=Avanzando;
+  				}
+
   			  }
 	  	  break;
   	  case Dobla_Izquierda:
-  		if (TensionAve <= 3.5)
+  		if (TensionAve <= 1.0)
   		  	{
   		  	Estado=Falla;
   		    blinkingfalla=0;
@@ -424,11 +431,15 @@ int main(void)
   			  }
   		else
   			{
+  			if(delay_dobla>=50)
+  			{
+  			delay_dobla=0;
   			if(DIR>52)
   				{
   				 DIR=DIR-5;
   				}
   			Estado=Avanzando;
+  			}
   			}
   		  break;
   	  case Falla:
@@ -781,6 +792,7 @@ cuento_5ms++;
 cuento_10s++;
 cuento_20ms2++;
 blinkingfalla++;
+delay_dobla++;
 }
 /* USER CODE END 4 */
 
